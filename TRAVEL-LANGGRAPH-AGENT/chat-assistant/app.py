@@ -166,7 +166,15 @@ async def process_agent_response(res_data):
 async def on_action(action: cl.Action):
     """Handles the button click for flight selection"""
     thread_id = cl.user_session.get("thread_id")
-    price = float(action.value)
+    
+    # FIX: Access the price from the payload dictionary
+    # In the previous step, we set: payload={"price": f['price']}
+    try:
+        price = float(action.payload.get("price", 0))
+    except (TypeError, ValueError):
+        logger.error(f"Could not retrieve price from action payload: {action.payload}")
+        await cl.Message(content="⚠️ Error: Could not process the selected price.").send()
+        return
     
     logger.info(f"User selected flight: ${price} for thread {thread_id}")
     
