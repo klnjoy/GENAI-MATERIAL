@@ -23,7 +23,7 @@ jobs:
           - service: langgraph-agent
             repo: langgraph-agent
           - service: chat-assistant
-            repo: chat-assistant-ui
+            repo: chat-assistant
 
     steps:
       - name: Checkout Code
