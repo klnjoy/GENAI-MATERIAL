@@ -74,42 +74,65 @@ async def handle_message(message: cl.Message):
     thread_id = cl.user_session.get("thread_id")
     user_input = message.content.strip()
 
-    # 1. Budget Adjustment Shortcut
+    # 1. Budget Adjustment Shortcut (Keep this for quick updates)
     if user_input.replace('.', '', 1).isdigit():
         payload = {"thread_id": thread_id, "action": "fix_budget", "data": {"total_budget": float(user_input)}}
         res_data = await call_agent(payload)
         await process_agent_response(res_data)
         return
 
-    # 2. Data Validation (The Shield)
-    structured_data = await parse_user_request(user_input)
+    # 2. Retrieve existing data from session or initialize fresh
+    current_data = cl.user_session.get("travel_data", {
+        "origin": "unknown",
+        "destination": "unknown",
+        "travel_date_input": "unknown",
+        "total_budget": None
+    })
+
+    # 3. Use the Shield to extract NEW details from the LATEST message
+    new_details = await parse_user_request(user_input)
     
+    # 4. MERGE: Only overwrite "unknown" or None fields with actual values
+    if new_details:
+        if new_details.get("origin") != "unknown":
+            current_data["origin"] = new_details["origin"]
+        if new_details.get("destination") != "unknown":
+            current_data["destination"] = new_details["destination"]
+        if new_details.get("travel_date_input") != "unknown":
+            current_data["travel_date_input"] = new_details["travel_date_input"]
+        if new_details.get("total_budget"):
+            current_data["total_budget"] = new_details["total_budget"]
+
+    # Save progress back to session
+    cl.user_session.set("travel_data", current_data)
+
+    # 5. Check what is STILL missing
     missing = []
-    if structured_data.get("origin") == "unknown": missing.append("Source City")
-    if structured_data.get("destination") == "unknown": missing.append("Destination")
-    if not structured_data.get("total_budget"): missing.append("Total Budget")
+    if current_data["origin"] == "unknown": missing.append("Source City")
+    if current_data["destination"] == "unknown": missing.append("Destination")
+    if not current_data["total_budget"]: missing.append("Total Budget")
 
     if missing:
-        msg = "I need a few more details to start searching: **" + ", ".join(missing) + "**."
+        msg = f"Got it! Still need: **{', '.join(missing)}** to start the search."
         await cl.Message(content=msg).send()
         return
 
-    # 3. Validated - Call Agent
+    # 6. Success - Clear session data for this trip and call Agent
+    cl.user_session.set("travel_data", None) 
+    
     payload = {
         "thread_id": thread_id,
         "action": "start",
-        "data": {
-            **structured_data,
-            "messages": []
-        }
+        "data": {**current_data, "messages": []}
     }
+    
+    await cl.Message(content=f"🚀 All set! Searching flights from {current_data['origin']} to {current_data['destination']}...").send()
     
     try:
         res_data = await call_agent(payload)
         await process_agent_response(res_data)
     except Exception as e:
         await cl.Message(content=f"⚠️ Agent Error: {e}").send()
-
 async def process_agent_response(res_data):
     """UI Rendering Logic"""
     # 1. Flight Buttons
