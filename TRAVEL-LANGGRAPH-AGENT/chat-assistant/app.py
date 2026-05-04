@@ -146,7 +146,15 @@ async def handle_message(message: cl.Message):
     logger.info(f"📩 USER INPUT: {user_input}")
 
     thread_id = cl.user_session.get("thread_id")
+    if any(word in user_input.lower() for word in ["book", "ticket", "flight"]):
+        logger.info("🆕 New booking intent detected → resetting session")
 
+        cl.user_session.set("travel_data", DEFAULT_STATE.copy())
+
+    # Reset thread ONLY if NOT retrieving
+    if not user_input.lower().startswith("/retrieve"):
+        thread_id = cl.user_session.get("id")
+        cl.user_session.set("thread_id", thread_id)
     # =========================
     # RETRIEVE FLOW
     # =========================
@@ -247,6 +255,10 @@ async def handle_message(message: cl.Message):
 # =========================================================
 # UI LOGIC
 # =========================================================
+if res_data.get("error") or res_data.get("detail"):
+    err = res_data.get("error") or res_data.get("detail")
+    await cl.Message(content=f"❌ Backend Error: {err}").send()
+    return
 
 async def process_agent_response(res_data):
 
@@ -266,6 +278,11 @@ async def process_agent_response(res_data):
 📅 {res_data.get("travel_date_formatted", "unknown")}
 """
         await cl.Message(content=summary).send()
+    # 🔥🔥 CRITICAL FIX → RESET SESSION FOR NEXT BOOKING
+        cl.user_session.set("travel_data", DEFAULT_STATE.copy())
+        cl.user_session.set("thread_id", cl.user_session.get("id"))
+
+        logger.info("♻️ Session reset for new booking")
         return
 
     # -------------------------
